@@ -1,19 +1,19 @@
-# 🏡 BudgetColoc — édition colorée
+# BudgetColoc — L3 MIAGE
 
-Projet pédagogique L3 MIAGE : Valérie, Amandine, Yassine, Maya, Jihad.
+Application web de gestion de colocation : charges mensuelles, dépenses ponctuelles, dettes détaillées, profils individuels et **Budget & Prévisions**.
 
-## Démarrer
-Ouvrir `index.html` dans un navigateur ou publier les fichiers à la racine du dépôt GitHub Pages.
+## Installation
+Ouvrir `index.html` dans un navigateur ou publier les fichiers à la racine d’un dépôt GitHub Pages.
 
-## Fonctionnalités
-- Compte commun virtuel et charges mensuelles, responsable désigné
-- Dépenses ponctuelles réparties entre les participants
-- Dettes détaillées et validation des remboursements
-- **Cartes de profils cliquables** : dettes dues, créances, charges sous responsabilité, remboursements validés
-- Bouton de réinitialisation des données
+## Budget & Prévisions
+- Saisir des revenus disponibles (facultatifs et fictifs pour la démonstration).
+- Choisir la répartition égalitaire ou proportionnelle.
+- Proposer des enveloppes (50 % courses, 20 % loisirs, 20 % équipement, 10 % imprévus), puis les modifier et enregistrer.
+- Visualiser le camembert des dépenses réellement saisies pour le mois courant.
+- Suivre la consommation des enveloppes.
+- Les budgets sont des prévisions : ils ne génèrent pas de dettes.
 
-## Attention
-Les données restent dans le `localStorage` du navigateur. Aucune synchronisation entre appareils et aucun mouvement bancaire réel. Les profils sont des vues partagées, **pas des comptes privés ni une authentification**. Les charges mensuelles affichées sur la fiche sont celles dont la personne est responsable ; les dettes montrent les parts qu'elle doit rembourser pour les charges payées.
+## Limites
+Les données sont stockées localement dans le navigateur (`localStorage`) : pas de synchronisation entre appareils, pas de compte bancaire réel ni de connexion privée. Ne pas saisir de revenus réels sur un appareil partagé.
 
-## Mise à jour de GitHub Pages
-Remplacer à la racine du dépôt les quatre fichiers `index.html`, `style.css`, `script.js`, `README.md`. Après le commit, patienter jusqu'au déploiement dans Actions, puis recharger le site avec Ctrl+F5. La clé de stockage est inchangée (`budgetcoloc-v3`) : les données locales existantes sont conservées.
+Groupe : Valérie, Amandine, Yassine, Maya et Jihad.
