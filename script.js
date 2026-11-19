@@ -1,22 +1,26 @@
 'use strict';
 // Toutes les sommes sont stockées en centimes pour éviter les erreurs d'arrondi.
-const KEY = 'budgetcoloc-v3'; // Même clé : conserve les données de la version précédente.
+const REAL_KEY = 'budgetcoloc-v3'; // Les données manuelles existantes sont préservées.
+const DEMO_KEY = 'budgetcoloc-demo-v1';
+const MODE_KEY = 'budgetcoloc-active-mode';
+let demoMode = localStorage.getItem(MODE_KEY) === 'demo';
+const KEY = demoMode ? DEMO_KEY : REAL_KEY;
 const MEMBERS = ['Valérie', 'Amandine', 'Yassine', 'Maya', 'Jihad'];
 const $ = id => document.getElementById(id);
 const money = cents => (cents / 100).toLocaleString('fr-FR', {style:'currency',currency:'EUR'});
 const today = () => new Date().toLocaleDateString('fr-FR');
 const fresh = () => ({charges:[], debts:[], operations:[]});
 const uid = () => (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
-function load(){try {const x=JSON.parse(localStorage.getItem(KEY));if(x&&Array.isArray(x.charges)&&Array.isArray(x.debts)&&Array.isArray(x.operations))return x;}catch(e){console.warn('Sauvegarde illisible',e);}return fresh();}
+function load(){try {const x=JSON.parse(localStorage.getItem(demoMode ? DEMO_KEY : REAL_KEY));if(x&&Array.isArray(x.charges)&&Array.isArray(x.debts)&&Array.isArray(x.operations))return x;}catch(e){console.warn('Sauvegarde illisible',e);}return fresh();}
 let data=load();
 const CATS=[{id:"fixes",name:"🏠 Charges fixes",color:"#8556d8"},{id:"courses",name:"🛒 Courses",color:"#ee86b4"},{id:"loisirs",name:"🎮 Loisirs",color:"#4db9a9"},{id:"equipement",name:"🛋️ Équipement",color:"#f4b64f"},{id:"imprevus",name:"🧰 Imprévus",color:"#74a9e9"}];
-function budgetData(){if(!data.budget)data.budget={incomes:{},target:0,variable:0,mode:"equal",envelopes:{}};return data.budget;}
+function budgetData(){if(!data.budget)data.budget={incomes:{},target:0,variable:0,mode:"equal",envelopes:{}};if(!data.budget.rents)data.budget.rents={};if(!data.budget.personalCosts)data.budget.personalCosts={};return data.budget;}
 const monthKey=()=>new Date().toLocaleDateString("sv-SE").slice(0,7);
 
 let selectedProfile=null;
 const PROFILE_COLORS=['#ffb9c8','#c7b8ff','#a9e6df','#ffe2a7','#b9d7ff'];
 const PROFILE_ICONS=['🌸','🎨','🚀','🌻','🎧'];
-function save(){localStorage.setItem(KEY,JSON.stringify(data));render();}
+function save(){localStorage.setItem(demoMode ? DEMO_KEY : REAL_KEY,JSON.stringify(data));render();}
 function cents(value){const n=Number(value);if(!Number.isFinite(n)||n<=0||Math.round(n*100)<=0)throw Error('Montant invalide');return Math.round(n*100);}
 function split(amount,participants){const base=Math.floor(amount/participants.length),rest=amount%participants.length;return participants.map((name,i)=>({name,amount:base+(i<rest?1:0)}));}
 function addDebts(label,amount,payer,participants){for(const share of split(amount,participants)){if(share.name!==payer && share.amount>0)data.debts.push({id:uid(),label,from:share.name,to:payer,amount:share.amount,paid:false,date:today()});}}
@@ -24,6 +28,7 @@ function operation(kind,label,amount){data.operations.push({id:uid(),kind,label,
 function el(tag,content,className){const n=document.createElement(tag);if(content!==undefined)n.textContent=String(content);if(className)n.className=className;return n;}
 function cell(row,text){row.append(el('td',text));}
 function render(){
+  if(!$('balance')){renderBudget();return;}
   const inTotal=data.operations.filter(x=>x.kind==='deposit').reduce((s,x)=>s+x.amount,0);
   const outTotal=data.operations.filter(x=>x.kind==='withdrawal').reduce((s,x)=>s+x.amount,0);
   $('balance').textContent=money(inTotal-outTotal);
@@ -32,12 +37,12 @@ function render(){
   $('chargeCount').textContent=data.charges.length;
   $('charges').replaceChildren();
   for(const c of data.charges){const box=el('div',undefined,'charge');box.append(el('strong',`${c.name} — ${money(c.amount)}`),el('div',`Responsable : ${c.owner} · Échéance : le ${c.day} du mois`,'muted'));
-    const b=el('button','Verser et payer ce mois');b.type='button';b.addEventListener('click',()=>payCharge(c.id));box.append(b);$('charges').append(box);}
+    const hasDeposit=data.operations.some(o=>o.kind==='deposit'&&o.chargeId===c.id&&o.period===monthKey());const isPaid=data.operations.some(o=>o.kind==='withdrawal'&&o.chargeId===c.id&&o.period===monthKey());box.append(el('small',isPaid?'✅ Prélevée':hasDeposit?'🕒 Provision déjà versée · prélèvement en attente':'⏳ Versement et prélèvement à effectuer','muted'));const b=el('button',isPaid?'Déjà prélevée':hasDeposit?'Enregistrer le prélèvement':'Verser et payer ce mois');b.disabled=isPaid;b.type='button';b.addEventListener('click',()=>payCharge(c.id));box.append(b);$('charges').append(box);}
   if(!data.charges.length)$('charges').append(el('p','Aucune charge mensuelle.','muted'));
   const totals=Object.fromEntries(MEMBERS.map(n=>[n,{owes:0,receives:0}]));
   for(const d of data.debts.filter(x=>!x.paid)){totals[d.from].owes+=d.amount;totals[d.to].receives+=d.amount;}
   renderProfiles(totals);
-  renderBudget();
+  // Le budget est affiché sur sa page dédiée.
   $('summary').replaceChildren();for(const m of MEMBERS){const tr=el('tr');cell(tr,m);cell(tr,money(totals[m].owes));cell(tr,money(totals[m].receives));$('summary').append(tr);}
   $('debts').replaceChildren();for(const d of data.debts.slice().reverse()){const tr=el('tr');cell(tr,d.label);cell(tr,d.from);cell(tr,d.to);cell(tr,money(d.amount));const st=el('td');st.append(el('span',d.paid?'Remboursé':'À rembourser',`tag ${d.paid?'paid':''}`));tr.append(st);const action=el('td');if(!d.paid){const b=el('button','Marquer remboursé');b.addEventListener('click',()=>{if(confirm(`Confirmer le remboursement de ${money(d.amount)} par ${d.from} à ${d.to} ?`)){d.paid=true;operation('settlement',`${d.from} → ${d.to} (${d.label})`,d.amount);save();}});action.append(b);}else action.textContent='✓';tr.append(action);$('debts').append(tr);}
   if(!data.debts.length){const tr=el('tr');const td=el('td','Aucune dette enregistrée.');td.colSpan=6;tr.append(td);$('debts').append(tr);}
@@ -73,25 +78,128 @@ function renderProfiles(totals){
   listRows('profileSettlements',data.debts.filter(d=>d.paid&&(d.from===name||d.to===name)), 'Aucun remboursement validé.',d=>profileRow(d.label,`${d.from} → ${d.to} · remboursé`,money(d.amount)));
 }
 function profileRow(title,subtitle,amount){const row=el('div',undefined,'profile-row');const left=el('div');left.append(el('strong',title),el('small',subtitle));row.append(left,el('b',amount));return row;}
-$('closeProfile').addEventListener('click',()=>{selectedProfile=null;render();$('profils').scrollIntoView({behavior:'smooth'});});
-function payCharge(id){const c=data.charges.find(x=>x.id===id);if(!c)return;const period=monthKey();if(data.operations.some(o=>o.chargeId===id&&o.period===period&&o.kind==='withdrawal')){alert('Cette charge a déjà été payée pour le mois en cours.');return;}
-  if(!confirm(`${c.owner} avance ${money(c.amount)} sur le compte commun, puis la facture « ${c.name} » est prélevée. Confirmer ?`))return;
-  const deposit={id:uid(),kind:'deposit',label:`Versement de ${c.owner} pour ${c.name}`,amount:c.amount,date:today(),chargeId:id,period};
-  const withdrawal={id:uid(),kind:'withdrawal',label:`Prélèvement ${c.name}`,amount:c.amount,date:today(),chargeId:id,period};
-  withdrawal.category=c.category||'fixes';withdrawal.month=period;data.operations.push(deposit,withdrawal);addDebts(`${c.name} (${period})`,c.amount,c.owner,MEMBERS);save();
+if($('closeProfile')) $('closeProfile').addEventListener('click',()=>{selectedProfile=null;render();$('profils').scrollIntoView({behavior:'smooth'});});
+function payCharge(id){
+ const c=data.charges.find(x=>x.id===id);if(!c)return;
+ const period=monthKey();
+ const hasWithdrawal=data.operations.some(o=>o.chargeId===id&&o.period===period&&o.kind==='withdrawal');
+ if(hasWithdrawal){alert('Cette charge a déjà été payée pour le mois en cours.');return;}
+ const hasDeposit=data.operations.some(o=>o.chargeId===id&&o.period===period&&o.kind==='deposit');
+ const message=hasDeposit
+  ? `Le versement de ${c.owner} pour ${c.name} est déjà sur le compte commun. Confirmer uniquement le prélèvement de ${money(c.amount)} ?`
+  : `${c.owner} verse ${money(c.amount)} sur le compte commun, puis la facture « ${c.name} » est prélevée. Confirmer ?`;
+ if(!confirm(message))return;
+ if(!hasDeposit)data.operations.push({id:uid(),kind:'deposit',label:`Versement de ${c.owner} pour ${c.name}`,amount:c.amount,date:today(),chargeId:id,period});
+ data.operations.push({id:uid(),kind:'withdrawal',label:`Prélèvement ${c.name}`,amount:c.amount,date:today(),chargeId:id,period,category:c.category||'fixes',month:period});
+ addDebts(`${c.name} (${period})`,c.amount,c.owner,MEMBERS);
+ save();
 }
+if($('chargeOwner')) {
 for(const id of ['chargeOwner','expensePayer']){for(const m of MEMBERS){const o=el('option',m);o.value=m;$(id).append(o);}}
 for(const m of MEMBERS){const label=el('label');const checkbox=el('input');checkbox.type='checkbox';checkbox.value=m;checkbox.checked=true;checkbox.name='participant';label.append(checkbox,document.createTextNode(m));$('participants').append(label);}
 $('chargeForm').addEventListener('submit',e=>{e.preventDefault();try{const name=$('chargeName').value.trim(),amount=cents($('chargeAmount').value),day=Number($('chargeDay').value);if(!name||!Number.isInteger(day)||day<1||day>28)throw Error('Informations invalides');data.charges.push({id:uid(),name,amount,owner:$('chargeOwner').value,category:$('chargeCategory').value,day});save();e.target.reset();}catch(err){alert(err.message);}});
 $('expenseForm').addEventListener('submit',e=>{e.preventDefault();try{const name=$('expenseName').value.trim(),amount=cents($('expenseAmount').value),payer=$('expensePayer').value,participants=[...document.querySelectorAll('input[name="participant"]:checked')].map(x=>x.value);if(!name||!participants.length)throw Error('Choisissez une description et au moins un participant.');if(!confirm(`Enregistrer ${money(amount)} payés par ${payer}, partagés entre ${participants.join(', ')} ?`))return;addDebts(name,amount,payer,participants);operation('personal',`${name} — payé par ${payer}`,amount);const op=data.operations[data.operations.length-1];op.category=$('expenseCategory').value;op.month=monthKey();save();e.target.reset();}catch(err){alert(err.message);}});
 
+}
 // Budget : prévisions séparées des dettes. Les opérations réelles alimentent les graphiques.
 function euroInput(id,value){const input=$(id);if(document.activeElement!==input)input.value=(value/100).toFixed(2);}
-function initBudget(){const root=$('incomeInputs');MEMBERS.forEach((name,i)=>{const label=el('label',name);const input=el('input');input.id='income'+i;input.type='number';input.min='0';input.step='0.01';input.placeholder='0';label.append(input);root.append(label);});const env=$('envelopeInputs');CATS.forEach(c=>{const label=el('label',c.name);const input=el('input');input.id='env_'+c.id;input.type='number';input.min='0';input.step='0.01';input.value='0';label.append(input);env.append(label);});$('budgetMode').addEventListener('change',()=>{budgetData().mode=$('budgetMode').value;save();});$('saveBudget').addEventListener('click',()=>{try{const b=budgetData();b.incomes=Object.fromEntries(MEMBERS.map((m,i)=>[m,nonnegative($('income'+i).value)]));b.target=nonnegative($('budgetTarget').value);b.variable=nonnegative($('variableBudget').value);b.mode=$('budgetMode').value;save();alert('Budget enregistré.');}catch(e){alert(e.message);}});$('suggestBudget').addEventListener('click',()=>{try{const total=nonnegative($('variableBudget').value),weights={courses:50,loisirs:20,equipement:20,imprevus:10};let allocated=0;for(const c of CATS){if(c.id==='fixes')continue;const value=c.id==='imprevus'?total-allocated:Math.round(total*weights[c.id]/100);allocated+=value;$('env_'+c.id).value=(value/100).toFixed(2);} $('envelopeNotice').textContent='Proposition calculée : ajustez les montants puis cliquez sur Enregistrer les enveloppes.';}catch(e){alert(e.message);}});$('saveEnvelopes').addEventListener('click',()=>{try{const b=budgetData();b.envelopes=Object.fromEntries(CATS.map(c=>[c.id,nonnegative($('env_'+c.id).value)]));b.variable=nonnegative($('variableBudget').value);save();$('envelopeNotice').textContent='Enveloppes enregistrées. Les dépenses réelles apparaissent ci-dessous.';}catch(e){alert(e.message);}});}
+function fixedBudgetTotal(){return data.charges.filter(c=>(c.category||'fixes')==='fixes').reduce((sum,c)=>sum+c.amount,0);}
+function computedBudget(){const b=budgetData();const income=MEMBERS.reduce((sum,m)=>sum+(b.incomes[m]||0),0);const fixed=fixedBudgetTotal();const personal=MEMBERS.reduce((sum,m)=>sum+(b.rents[m]||0)+(b.personalCosts[m]||0),0);return {income,fixed,personal,variable:Math.max(0,income-fixed-personal)};}
+function initBudget(){
+ const root=$('incomeInputs');MEMBERS.forEach((name,i)=>{const label=el('label',name);const input=el('input');input.id='income'+i;input.type='number';input.min='0';input.step='0.01';input.placeholder='0';label.append(input);root.append(label);});
+ const personalRoot=$('personalChargeInputs');MEMBERS.forEach((name,i)=>{const row=el('div',undefined,'personal-budget-row');row.append(el('strong',name));for(const [prefix,title] of [['rent','🏠 Loyer individuel (€)'],['cost','Autres charges personnelles (€)']]){const label=el('label',title),input=el('input');input.id=prefix+i;input.type='number';input.min='0';input.step='0.01';input.placeholder='0';label.append(input);row.append(label);}personalRoot.append(row);});
+ const env=$('envelopeInputs');CATS.filter(c=>c.id!=='fixes').forEach(c=>{const label=el('label',c.name);const input=el('input');input.id='env_'+c.id;input.type='number';input.min='0';input.step='0.01';input.value='0';label.append(input);env.append(label);});
+ $('budgetMode').addEventListener('change',()=>{budgetData().mode=$('budgetMode').value;save();});
+ $('saveBudget').addEventListener('click',()=>{try{const b=budgetData();b.incomes=Object.fromEntries(MEMBERS.map((m,i)=>[m,nonnegative($('income'+i).value)]));b.rents=Object.fromEntries(MEMBERS.map((m,i)=>[m,nonnegative($('rent'+i).value)]));b.personalCosts=Object.fromEntries(MEMBERS.map((m,i)=>[m,nonnegative($('cost'+i).value)]));b.mode=$('budgetMode').value;save();$('envelopeNotice').textContent='Revenus enregistrés. Cliquez sur « Proposer une répartition » pour recalculer les enveloppes.';}catch(e){alert(e.message);}});
+ $('suggestBudget').addEventListener('click',()=>{const total=computedBudget().variable,weights={courses:50,loisirs:20,equipement:20,imprevus:10};let allocated=0;for(const c of CATS){if(c.id==='fixes')continue;const value=c.id==='imprevus'?total-allocated:Math.round(total*weights[c.id]/100);allocated+=value;$('env_'+c.id).value=(value/100).toFixed(2);} $('envelopeNotice').textContent='Proposition calculée après loyers, frais personnels et charges communes. Ajustez les montants, puis enregistrez.';});
+ $('saveEnvelopes').addEventListener('click',()=>{try{const b=budgetData(),envelopes=Object.fromEntries(CATS.filter(c=>c.id!=='fixes').map(c=>[c.id,nonnegative($('env_'+c.id).value)]));const sum=Object.values(envelopes).reduce((a,v)=>a+v,0);if(sum>computedBudget().variable)throw Error('Les enveloppes dépassent le budget disponible après toutes les charges. Réduisez les montants.');b.envelopes=envelopes;save();$('envelopeNotice').textContent='Enveloppes enregistrées. Les dépenses réelles apparaissent ci-dessous.';}catch(e){alert(e.message);}});
+}
 function nonnegative(value){const n=Number(value);if(!Number.isFinite(n)||n<0||Math.round(n*100)<0)throw Error('Saisissez un montant positif ou nul.');return Math.round(n*100);}
 function monthlySpend(){const totals=Object.fromEntries(CATS.map(c=>[c.id,0]));const period=monthKey();for(const op of data.operations){if(!['personal','withdrawal'].includes(op.kind))continue;const m=op.month||(op.date&&op.date.split('/').reverse().join('-').slice(0,7));if(m!==period)continue;totals[CATS.some(c=>c.id===op.category)?op.category:(op.kind==='withdrawal'?'fixes':'courses')]+=op.amount;}return totals;}
-function renderBudget(){const b=budgetData();MEMBERS.forEach((m,i)=>euroInput('income'+i,b.incomes[m]||0));euroInput('budgetTarget',b.target||0);euroInput('variableBudget',b.variable||0);if(document.activeElement!==$('budgetMode'))$('budgetMode').value=b.mode||'equal';CATS.forEach(c=>euroInput('env_'+c.id,b.envelopes[c.id]||0));const incomeTotal=MEMBERS.reduce((s,m)=>s+(b.incomes[m]||0),0),target=b.target||0;const result=$('contributionResult');result.replaceChildren();if(b.mode==='income'&&incomeTotal===0&&target>0)result.append(el('p','Renseignez au moins un revenu disponible pour répartir proportionnellement.','muted'));else{let remaining=target;MEMBERS.forEach((m,i)=>{const share=i===MEMBERS.length-1?remaining:(b.mode==='income'&&incomeTotal>0?Math.round(target*(b.incomes[m]||0)/incomeTotal):Math.round(target/MEMBERS.length));remaining-=share;result.append(profileRow(m,b.mode==='income'?'Proportionnelle':'Égalitaire',money(share)));});}const spent=monthlySpend(),total=Object.values(spent).reduce((a,v)=>a+v,0);const pie=$('expensePie');if(total===0){pie.style.background='#f0e9f8';pie.textContent='Aucune dépense ce mois';}else{let cursor=0;const parts=[];for(const c of CATS){const share=spent[c.id]/total*100;if(share>0){parts.push(`${c.color} ${cursor}% ${cursor+share}%`);cursor+=share;}}pie.style.background=`conic-gradient(${parts.join(',')})`;pie.textContent='';}const legend=$('pieLegend'),progress=$('envelopeProgress');legend.replaceChildren();progress.replaceChildren();for(const c of CATS){const line=el('div',undefined,'legend-row');const dot=el('span','', 'legend-dot');dot.style.background=c.color;line.append(dot,el('span',c.name),el('strong',money(spent[c.id])));legend.append(line);const cap=b.envelopes[c.id]||0,used=spent[c.id],pct=cap>0?used/cap*100:0;const box=el('div',undefined,'budget-progress');box.append(el('strong',`${c.name} — ${money(used)} / ${cap?money(cap):'non défini'}`));const track=el('div',undefined,'progress-track'),fill=el('div',undefined,'progress-fill');fill.style.width=Math.min(100,pct)+'%';fill.style.background=pct>100?'#dc4e78':pct>=70?'#f0aa4d':'#55b8a6';track.append(fill);box.append(track);if(cap>0)box.append(el('small',`${Math.round(pct)} % utilisé · ${money(cap-used)} restant`));progress.append(box);}}
-initBudget();
+// Répartit sans jamais demander à une personne plus que sa capacité réelle.
+// Les centimes restants sont redistribués aux personnes encore capables de contribuer.
+function allocateWithinCapacities(target, capacities, mode){
+ const paid=capacities.map(()=>0);let remaining=Math.min(Math.max(0,target),capacities.reduce((a,v)=>a+v,0));
+ while(remaining>0){
+  const eligible=capacities.map((cap,i)=>({i,room:cap-paid[i]})).filter(x=>x.room>0);
+  if(!eligible.length)break;
+  const weights=eligible.map(x=>mode==='income'?x.room:1);
+  const weightTotal=weights.reduce((a,v)=>a+v,0);
+  const planned=eligible.map((x,j)=>({i:x.i,amount:Math.min(x.room,Math.floor(remaining*weights[j]/weightTotal))}));
+  let used=0;for(const x of planned){paid[x.i]+=x.amount;used+=x.amount;}
+  remaining-=used;
+  if(remaining===0)break;
+  // Distribue les centimes restants ou redistribue après plafonnement.
+  let moved=0;for(const x of eligible){if(remaining===0)break;if(paid[x.i]<capacities[x.i]){paid[x.i]++;remaining--;moved++;}}
+  if(!used&&!moved)break;
+ }
+ return paid;
+}
+function renderBudget(){
+ const b=budgetData();MEMBERS.forEach((m,i)=>{euroInput('income'+i,b.incomes[m]||0);euroInput('rent'+i,b.rents[m]||0);euroInput('cost'+i,b.personalCosts[m]||0);});if(document.activeElement!==$('budgetMode'))$('budgetMode').value=b.mode||'equal';CATS.filter(c=>c.id!=='fixes').forEach(c=>euroInput('env_'+c.id,b.envelopes[c.id]||0));
+ const {income,fixed,personal,variable}=computedBudget();$('personalTotal').textContent=money(personal);$('fixedTotal').textContent=money(fixed);$('incomeTotal').textContent=money(income);$('availableBudget').textContent=money(income-fixed-personal);$('variableBudgetDisplay').textContent=money(variable);
+ $('budgetWarning').textContent=income===0?'Renseignez les revenus disponibles puis enregistrez-les.':income<fixed+personal?'⚠️ Les charges dépassent les revenus disponibles : aucun budget variable ne peut être proposé.':'Le budget variable tient compte des loyers personnels, des autres frais individuels et des charges communes. Ce n’est pas une obligation de tout dépenser.';
+ const breakdown=$('fixedBreakdown');breakdown.replaceChildren();for(const c of data.charges.filter(c=>(c.category||'fixes')==='fixes'))breakdown.append(profileRow(c.name,`Responsable : ${c.owner}`,money(c.amount)));if(!breakdown.children.length)breakdown.append(el('p','Aucune charge fixe enregistrée.','muted'));
+ const target=fixed+Object.values(b.envelopes).reduce((a,v)=>a+v,0),result=$('contributionResult');result.replaceChildren();
+ const capacities=MEMBERS.map(m=>Math.max(0,(b.incomes[m]||0)-(b.rents[m]||0)-(b.personalCosts[m]||0)));
+ const capacityTotal=capacities.reduce((a,v)=>a+v,0);
+ const allocation=allocateWithinCapacities(target,capacities,b.mode||'equal');
+ result.append(el('p',`Montant prévu pour les charges communes et les enveloppes : ${money(target)}. Capacité totale après loyers et frais personnels : ${money(capacityTotal)}.`, 'muted'));
+ if(target>capacityTotal)result.append(el('p',`⚠️ Budget irréalisable : il manque ${money(target-capacityTotal)}. Réduisez les enveloppes ou revoyez les charges. Aucun colocataire ne doit dépasser sa capacité.`, 'budget-alert'));
+ if(target>0&&capacityTotal===0)result.append(el('p','Renseignez les revenus et charges personnelles pour calculer une répartition réaliste.','muted'));
+ MEMBERS.forEach((m,i)=>{const cap=capacities[i],share=allocation[i];const row=profileRow(m,`Disponible après loyer et frais personnels : ${money(cap)} · Contribution ${b.mode==='income'?'proportionnelle aux capacités':'égalitaire ajustée aux capacités'}`,money(share));result.append(row);});
+ if(target>capacityTotal)result.append(el('p',`Montant non financé : ${money(target-capacityTotal)}.`, 'budget-alert'));
+ const spent=monthlySpend(),total=Object.values(spent).reduce((a,v)=>a+v,0);const pie=$('expensePie');if(total===0){pie.style.background='#f0e9f8';pie.textContent='Aucune dépense ce mois';}else{let cursor=0;const parts=[];for(const c of CATS){const share=spent[c.id]/total*100;if(share>0){parts.push(`${c.color} ${cursor}% ${cursor+share}%`);cursor+=share;}}pie.style.background=`conic-gradient(${parts.join(',')})`;pie.textContent='';}const legend=$('pieLegend'),progress=$('envelopeProgress');legend.replaceChildren();progress.replaceChildren();for(const c of CATS){const line=el('div',undefined,'legend-row');const dot=el('span','', 'legend-dot');dot.style.background=c.color;line.append(dot,el('span',c.name),el('strong',money(spent[c.id])));legend.append(line);const cap=c.id==='fixes'?fixed:(b.envelopes[c.id]||0),used=spent[c.id],pct=cap>0?used/cap*100:0;const box=el('div',undefined,'budget-progress');box.append(el('strong',`${c.name} — ${money(used)} / ${cap?money(cap):'non défini'}`));const track=el('div',undefined,'progress-track'),fill=el('div',undefined,'progress-fill');fill.style.width=Math.min(100,pct)+'%';fill.style.background=pct>100?'#dc4e78':pct>=70?'#f0aa4d':'#55b8a6';track.append(fill);box.append(track);if(cap>0)box.append(el('small',`${Math.round(pct)} % utilisé · ${money(cap-used)} restant`));progress.append(box);}}
 
-$('reset').addEventListener('click',()=>{if(confirm('Effacer toutes les données de cette version, y compris les budgets ?')){data=fresh();save();}});
+// Mode démonstration : jeu de données entièrement fictif, isolé des saisies manuelles.
+function demoDataset(){
+ const incomes=[920,1050,870,1120,980], rents=[330,370,310,390,350], costs=[155,175,140,190,160];
+ const b={incomes:{},rents:{},personalCosts:{},mode:'income',envelopes:{courses:42000,loisirs:12000,equipement:9000,imprevus:9000}};
+ MEMBERS.forEach((m,i)=>{b.incomes[m]=incomes[i]*100;b.rents[m]=rents[i]*100;b.personalCosts[m]=costs[i]*100;});
+ const charges=[['Électricité',95,'Valérie',10],['Internet fibre',32,'Yassine',8],['Assurance habitation',24,'Amandine',5],['Eau',48,'Maya',12]].map(([name,amount,owner,day])=>({id:uid(),name,amount:amount*100,owner,day,category:'fixes'}));
+ const example={charges,debts:[],operations:[],budget:b};
+ const period=monthKey();
+ // Les factures dont l'échéance est passée sont réglées dans la démonstration.
+ // Les échéances futures restent à payer ; chaque facture ne crée qu'une seule dette.
+ function debtsFor(label,amount,payer,participants){for(const share of split(amount,participants)){if(share.name!==payer)example.debts.push({id:uid(),label,from:share.name,to:payer,amount:share.amount,paid:false,date:today()});}}
+ // Démonstration figée au 8 du mois : chaque responsable a viré sa provision le 5.
+ // Le compte garde l'argent des factures prévues après le 8 (électricité le 10, eau le 12).
+ const now=new Date();
+ const demoDay=8;
+ const demoDate=day=>`${String(day).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+ for(const charge of charges){
+   example.operations.push({id:uid(),kind:'deposit',label:`Virement automatique de ${charge.owner} pour ${charge.name}`,amount:charge.amount,date:demoDate(5),chargeId:charge.id,period});
+   if(charge.day>demoDay)continue;
+   example.operations.push({id:uid(),kind:'withdrawal',label:`Prélèvement ${charge.name}`,amount:charge.amount,date:demoDate(charge.day),chargeId:charge.id,period,category:'fixes',month:period});
+   debtsFor(`${charge.name} (${period})`,charge.amount,charge.owner,MEMBERS);
+ }
+ for(const [label,amount,payer,category,participants] of [
+  ['Courses de la semaine',8350,'Maya','courses',MEMBERS],
+  ['Soirée cinéma',4800,'Jihad','loisirs',MEMBERS],
+  ['Produits ménagers',2670,'Amandine','equipement',MEMBERS],
+  ['Courses complémentaires',3920,'Yassine','courses',MEMBERS]
+ ]){debtsFor(label,amount,payer,participants);example.operations.push({id:uid(),kind:'personal',label:`${label} — payé par ${payer}`,amount,date:today(),category,month:period});}
+ return example;
+}
+function setDemoMode(enabled){
+ if(enabled===demoMode)return;
+ if(enabled&&!localStorage.getItem(DEMO_KEY))localStorage.setItem(DEMO_KEY,JSON.stringify(demoDataset()));
+ demoMode=enabled;
+ localStorage.setItem(MODE_KEY,enabled?'demo':'manual');
+ window.location.reload();
+}
+function initModeControls(){
+ const container=document.getElementById('modeControls');if(!container)return;
+ const status=el('span',demoMode?'🎬 Démonstration au 8 du mois · virements effectués le 5':'✍️ Mode manuel actif · vos données','mode-status');
+ const demo=el('button','🎬 Mode démonstration','secondary');demo.type='button';demo.disabled=demoMode;
+ const manual=el('button','✍️ Mode manuel','secondary');manual.type='button';manual.disabled=!demoMode;
+ demo.addEventListener('click',()=>setDemoMode(true));manual.addEventListener('click',()=>setDemoMode(false));
+ container.append(status,demo,manual);
+ if(demoMode){const restart=el('button','↻ Recharger les exemples','secondary');restart.type='button';restart.addEventListener('click',()=>{if(confirm('Recharger les données fictives de démonstration ? Les changements effectués en mode démo seront remplacés. Vos données manuelles resteront intactes.')){localStorage.setItem(DEMO_KEY,JSON.stringify(demoDataset()));window.location.reload();}});container.append(restart);}
+}
+
+initModeControls();
+if($('incomeInputs')) initBudget();
+
+if($('reset')) $('reset').addEventListener('click',()=>{if(confirm(demoMode?'Réinitialiser uniquement les données de démonstration ?':'Effacer toutes vos données manuelles, y compris les budgets ?')){data=fresh();save();}});
 render();
