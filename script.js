@@ -102,21 +102,29 @@ function memberBalances(name){
  return {initial,current,projected:current-owes+receivable,owes,receivable};
 }
 function monthFromFrenchDate(date){const m=String(date||'').match(/^\d{2}\/(\d{2})\/(\d{4})$/);return m?`${m[2]}-${m[1]}`:null;}
+// Contribution nette : dépenses/avances + remboursements payés - remboursements reçus.
+// Les remboursements transfèrent la contribution déjà effectuée sans modifier
+// la contribution théorique calculée dans Budget & Prévisions.
 function memberOutgoingThisMonth(name){
- const period=monthKey();let outgoing=0;
+ const period=monthKey();let contributed=0;
  for(const op of data.operations){
   if((op.month||op.period||monthFromFrenchDate(op.date))!==period)continue;
-  if(op.kind==='personal'&&(op.payer||MEMBERS.find(m=>op.label?.endsWith(`payé par ${m}`)))===name)outgoing+=op.amount;
-  if(op.kind==='deposit'&&(op.payer||data.charges.find(c=>c.id===op.chargeId)?.owner)===name)outgoing+=op.amount;
-  if(op.kind==='settlement'&&(op.from||op.label?.split(' → ')[0])===name)outgoing+=op.amount;
+  if(op.kind==='personal'&&(op.payer||MEMBERS.find(m=>op.label?.endsWith(`payé par ${m}`)))===name)contributed+=op.amount;
+  if(op.kind==='deposit'&&(op.payer||data.charges.find(c=>c.id===op.chargeId)?.owner)===name)contributed+=op.amount;
+  if(op.kind==='settlement'){
+   const from=op.from||op.label?.split(' → ')[0];
+   const to=op.to||op.label?.split(' → ')[1]?.split(' (')[0];
+   if(from===name)contributed+=op.amount;
+   if(to===name)contributed-=op.amount;
+  }
  }
- return outgoing;
+ return contributed;
 }
 function renderMemberBalances(allocation){
  const root=$('memberBudgetBalances');if(!root)return;root.replaceChildren();
  const statuses=plannedContributionStatus();
  const table=el('table');table.className='budget-overview-table';const head=el('thead'),tr=el('tr');
- for(const h of ['Colocataire','Budget après frais perso.','Contribution prévue','Déjà versé / avancé','Reste à contribuer','Disponible actuel','Après remboursements']){tr.append(el('th',h));}
+ for(const h of ['Colocataire','Budget après frais perso.','Contribution prévue','Contribution nette effectuée','Reste à contribuer','Disponible actuel','Après remboursements']){tr.append(el('th',h));}
  head.append(tr);table.append(head);const body=el('tbody');
  MEMBERS.forEach((name,i)=>{
   const balance=statuses[i],paid=balance.advanced,expected=balance.planned,remaining=balance.remaining;
@@ -124,7 +132,7 @@ function renderMemberBalances(allocation){
   if(balance.current<0)row.className='balance-negative';body.append(row);
  });
  table.append(body);const scroller=el('div',undefined,'scroll');scroller.append(table);root.append(scroller);
- root.append(el('p','« Reste à contribuer » = contribution prévue − avances et versements enregistrés ce mois (minimum 0 €). Les avances peuvent dépasser la prévision ; ce calcul ne mesure pas un solde bancaire. « Après remboursements » tient compte des dettes et créances ouvertes.','muted'));
+ root.append(el('p','« Reste à contribuer » = contribution prévue − contribution nette (avances et dépenses + remboursements payés − remboursements reçus), minimum 0 €. La contribution nette peut dépasser la prévision ou devenir négative ; ce calcul ne mesure pas un solde bancaire. « Après remboursements » tient compte des dettes et créances ouvertes.','muted'));
 }
 
 function currentContributionAllocation(){
@@ -200,7 +208,7 @@ function renderProfiles(totals){
     const title=el('strong',name);const sub=el('span',`À payer : ${money(totals[name].owes)}`,'profile-sub');
     const status=contributionStatuses[i];
     const planned=status.planned, advanced=status.advanced;
-    const ratio=planned>0?Math.min(100,Math.round(advanced/planned*100)):0;
+    const ratio=planned>0?Math.max(0,Math.min(100,Math.round(advanced/planned*100))):0;
     const contribution=el('div',undefined,'profile-contribution');
     contribution.append(el('span','Contribution du mois','profile-contribution-label'));
     const track=el('div',undefined,'profile-contribution-track');
@@ -209,8 +217,8 @@ function renderProfiles(totals){
     const fill=el('div',undefined,'profile-contribution-fill');fill.style.width=ratio+'%';track.append(fill);
     contribution.append(track);
     const caption=planned>0
-      ?`${money(advanced)} / ${money(planned)} · ${ratio} %`
-      :`Aucune contribution prévue · ${money(advanced)} avancés`;
+      ?`${money(advanced)} nets / ${money(planned)} · ${ratio} %`
+      :`Aucune contribution prévue · ${money(advanced)} nets`;
     contribution.append(el('span',caption,'profile-contribution-caption'));
     if(planned>0&&advanced>planned)contribution.append(el('span',`Avance supplémentaire : ${money(advanced-planned)}`,'profile-contribution-extra'));
     card.append(avatar,title,sub,contribution,el('span','Voir ma fiche →','profile-cta'));

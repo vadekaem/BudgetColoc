@@ -79,3 +79,7 @@ Lors du retour depuis la démonstration, une confirmation propose de remettre to
 - Les charges des autres catégories ne figurent pas dans la liste des charges fixes : elles restent visibles sur Gestion.
 - IMPORTANT : vérifier que les deux pages sont sur le même site/origine et dans le même mode (manuel ou démonstration).
 - Les changements ne se synchronisent pas entre un fichier local (`file://`) et GitHub Pages, ni entre deux navigateurs différents.
+
+
+## V11 — remboursements et contribution nette
+Chaque remboursement augmente la contribution nette du payeur et diminue celle du bénéficiaire. La contribution prévue (objectif budgétaire) reste inchangée. Les barres et le tableau Budget utilisent le même calcul.
