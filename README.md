@@ -31,3 +31,51 @@ Au chargement des exemples, les charges dont la date d’échéance est passée 
 
 ## Scénario de démonstration — situation au 8 du mois
 Les quatre responsables virent automatiquement leur provision sur le compte commun le 5 du mois. Au 8, l’assurance (5) et Internet (8) sont prélevés ; l’électricité (10) et l’eau (12) restent à prélever. Le solde du compte correspond donc aux provisions en attente (143 €). La démonstration est un instantané fictif au 8, quel que soit le jour réel de présentation. Le bouton de paiement détecte les versements déjà effectués pour éviter de les compter deux fois. Cliquer sur « Recharger les exemples » pour réinitialiser ce scénario.
+
+## Mise à jour — colocataires et disponibilités
+- Ajouter un colocataire, supprimer un colocataire sans opération liée.
+- Correction du prénom Yasmine avec migration des sauvegardes Yassine.
+- Disponible actuel : revenu - loyer - frais personnels - avances et achats + remboursements reçus - remboursements versés.
+- Après remboursements : disponible actuel - dettes ouvertes + créances ouvertes.
+- Ces indicateurs sont des estimations et non des soldes bancaires.
+\n## Recommandation pour les prochaines courses\nSaisir un montant estimé sur la page Gestion ou Budget. La recommandation classe les colocataires par disponibilité actuelle, vérifie qu’ils peuvent avancer le montant, et affiche leur reste avant et après remboursements. Aucun paiement n’est créé.\n
+## Budget & Prévisions — lisibilité et suivi des contributions
+La répartition des contributions est placée sous les enveloppes afin de supprimer le grand vide. Le tableau récapitulatif compare pour chaque personne la contribution prévue, les montants sortants enregistrés ce mois, le reste à contribuer, le disponible actuel et le disponible après remboursements. Les avances sont comptées au titre du suivi indicatif des contributions, sans créer de nouvelle opération.
+
+## Correctifs de répartition (21 novembre)
+- Sélecteur égalitaire/proportionnel repositionné au-dessus des contributions prévues.
+- La page Gestion utilise les mêmes contributions calculées et le même mode enregistré que la page Budget ; synchronisation des onglets ouverts.
+- La recommandation courses privilégie le colocataire ayant le plus de contribution prévue restant à couvrir, sous réserve d'une disponibilité actuelle suffisante.
+- Les dépenses et remboursements enregistrés restent pris en compte. Aucun paiement automatique.
+
+Synchronisation corrigée : changement de mode enregistre aussi les valeurs du formulaire avant recalcul ; actualisation au retour sur chaque page, et cache JavaScript invalidé. Pour tester, ouvrir les deux pages sur le même domaine GitHub Pages et dans le même navigateur/mode.
+
+## Progression des contributions sur la page Gestion
+Les tableaux de budgets individuels et la recommandation pour les prochaines courses sont exclusivement dans Budget & Prévisions. La page Gestion affiche dans chaque carte une barre : avances et versements enregistrés ce mois / contribution prévue, recalculée suivant le mode égalitaire ou proportionnel sauvegardé. La barre est plafonnée à 100 %, et les dépassements restent indiqués.
+
+
+## Correction v4 — revenus synchronisés
+Les revenus, loyers et frais personnels sont sauvegardés automatiquement après saisie (350 ms) et au changement de champ. Les contributions prévues et les barres de progression se recalculent depuis ces valeurs sauvegardées. Les deux pages doivent être ouvertes sur la même origine et dans le même mode (manuel/démo).
+
+## V5 — cohérence entre les deux pages
+- Toutes les charges mensuelles ajoutées dans Gestion sont prises en compte dans le total des charges récurrentes sur Budget, même si leur catégorie est Courses/Loisirs/etc.
+- Les barres de progression et la répartition de la page Budget appellent désormais exactement la même fonction `calculatePlannedContributions()`.
+- Les deux pages relisent les données sauvegardées à chaque retour (pageshow/focus).
+- Les charges mensuelles et les enveloppes variables sont deux budgets distincts : éviter de prévoir la même dépense dans les deux.
+
+## V6 — corrections de synchronisation
+- Les charges mensuelles saisies sur Gestion figurent toutes dans « Charges fixes prévues » de Budget, avec recalcul immédiat du total et de la répartition lors de l'ouverture de Budget.
+- La répartition affichée dans Budget et l'objectif des barres sur Gestion proviennent de la même fonction `currentContributionAllocation()`.
+- Le mode égalitaire/proportionnel est stocké dans les données du mode manuel ou démo actif ; plus de mode global concurrent qui écrase le choix.
+- La page est actualisée à chaque retour (`pageshow`), focus et changement de visibilité.
+- Ne pas compter deux fois une charge mensuelle dans une enveloppe variable.
+
+## V7 : retour au mode manuel
+Lors du retour depuis la démonstration, une confirmation propose de remettre toutes les données manuelles à zéro (y compris le budget). Annuler conserve les anciennes données. Le mode démo reste isolé.
+
+## V8 : charges fixes
+- Une charge ajoutée sur Gestion avec la catégorie « Charges fixes » figure dans « Charges fixes prévues » sur Budget.
+- Le montant total et la répartition sont recalculés lors de chaque affichage de Budget, à partir du stockage local du mode actif.
+- Les charges des autres catégories ne figurent pas dans la liste des charges fixes : elles restent visibles sur Gestion.
+- IMPORTANT : vérifier que les deux pages sont sur le même site/origine et dans le même mode (manuel ou démonstration).
+- Les changements ne se synchronisent pas entre un fichier local (`file://`) et GitHub Pages, ni entre deux navigateurs différents.

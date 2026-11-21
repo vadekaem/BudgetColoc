@@ -30,3 +30,35 @@ body:has(#budget) .budget-section{margin-top:22px}
 .mode-status{font-weight:750;color:#593586;margin-right:auto;}
 .mode-help{margin:8px 0 0;font-size:.9rem;}
 @media(max-width:550px){.mode-controls{align-items:stretch}.mode-status{width:100%}.mode-controls button{flex:1 1 100%;}}
+
+.member-manager{margin-top:24px;padding-top:15px;border-top:1px solid #eee4fa}.member-add{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.member-add input{flex:1;min-width:190px;margin:0}.member-manager-row{display:inline-flex;align-items:center;gap:10px;padding:8px 10px;margin:10px 8px 0 0;border:1px solid #e5d6f5;border-radius:12px}.member-manager-row button{padding:6px 10px}.balance-negative td{color:#b91c1c}.mini-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.profile-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+/* Page budget : colonnes indépendantes, sans étirement artificiel */
+.budget-planning-grid{align-items:start;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:24px}
+.budget-planning-panel{min-width:0}
+.contribution-panel{background:#f8f3ff;border:1px solid #e9dcf8;border-radius:17px;padding:15px 17px;margin-top:18px}
+.contribution-panel h3{margin-top:2px}
+.contribution-panel .profile-row{background:white}
+.budget-overview{margin-top:24px;padding:20px;background:linear-gradient(135deg,#faf6ff,#fff9fc);border:1px solid #eadcf8;border-radius:18px}
+.budget-overview h3{margin-top:0}
+.budget-overview-table{font-size:.88rem}
+.budget-overview-table th{white-space:normal;min-width:110px;vertical-align:bottom}
+.budget-overview-table td:first-child{font-weight:900;color:#6d42b0}
+.budget-overview-table td:nth-child(5){font-weight:900;color:#9a4ac4}
+.budget-overview-table td:nth-child(6){font-weight:900;color:#0f766e}
+.budget-overview .scroll{background:#fff;border-radius:12px;border:1px solid #efe6f8}
+@media(max-width:780px){.budget-planning-grid{grid-template-columns:minmax(0,1fr)!important}.budget-overview{padding:14px}}
+
+/* Mode de répartition au-dessus du résultat, sans espace vide */
+.distribution-select{display:block;margin:12px 0 18px;font-weight:700}
+.distribution-select select{display:block;width:100%;margin-top:8px}
+
+/* Avancement des contributions, uniquement sur les fiches de la page Gestion. */
+.profile-card{min-height:245px}
+.profile-contribution{width:100%;text-align:left;display:grid;gap:5px;margin:4px 0 6px}
+.profile-contribution-label{font-size:.73rem;font-weight:800;color:#54436c}
+.profile-contribution-track{width:100%;height:11px;background:#e9e1f2;border-radius:999px;overflow:hidden}
+.profile-contribution-fill{height:100%;background:linear-gradient(90deg,#a78bfa,#ec4899);border-radius:999px;transition:width .25s}
+.profile-contribution-caption{font-size:.73rem;color:#514362;text-align:center;font-weight:700}
+.profile-contribution-extra{font-size:.68rem;color:#9d174d;text-align:center}
+@media(max-width:600px){.profile-card{min-height:238px}}
