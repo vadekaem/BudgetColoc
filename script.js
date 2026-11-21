@@ -1,7 +1,7 @@
 'use strict';
 // Toutes les sommes sont stockées en centimes pour éviter les erreurs d'arrondi.
 const REAL_KEY = 'budgetcoloc-v3'; // Les données manuelles existantes sont préservées.
-const DEMO_KEY = 'budgetcoloc-demo-v1';
+const DEMO_KEY = 'budgetcoloc-demo-v2';
 const MODE_KEY = 'budgetcoloc-active-mode';
 const ALLOCATION_MODE_KEY = 'budgetcoloc-allocation-mode'; // Mode de répartition commun aux deux pages.
 let demoMode = localStorage.getItem(MODE_KEY) === 'demo';
@@ -249,7 +249,11 @@ function payCharge(id){
  if(!confirm(message))return;
  if(!hasDeposit)data.operations.push({id:uid(),kind:'deposit',label:`Versement de ${c.owner} pour ${c.name}`,amount:c.amount,date:today(),chargeId:id,period,payer:c.owner,month:period});
  data.operations.push({id:uid(),kind:'withdrawal',label:`Prélèvement ${c.name}`,amount:c.amount,date:today(),chargeId:id,period,category:c.category||'fixes',month:period});
- addDebts(`${c.name} (${period})`,c.amount,c.owner,MEMBERS);
+ // Les dettes naissent au versement de l'avance, pas au prélèvement.
+ // Une démo déjà provisionnée possède donc ses dettes : ne pas les recréer.
+ if(!hasDeposit && !data.debts.some(d=>d.chargeId===id&&d.period===period)){
+  addDebts(`${c.name} (${period})`,c.amount,c.owner,MEMBERS);
+ }
  save();
 }
 if($('chargeOwner')) {
@@ -356,7 +360,7 @@ function demoDataset(){
  const example={members:[...DEFAULT_MEMBERS],charges,debts:[],operations:[],budget:b};
  const period=monthKey();
  // Les factures dont l'échéance est passée sont réglées dans la démonstration.
- // Les échéances futures restent à payer ; chaque facture ne crée qu'une seule dette.
+ // Les dettes sont dues dès l'avance, même avant le prélèvement de la facture.
  function debtsFor(label,amount,payer,participants){for(const share of split(amount,participants)){if(share.name!==payer)example.debts.push({id:uid(),label,from:share.name,to:payer,amount:share.amount,paid:false,date:today()});}}
  // Démonstration figée au 8 du mois : chaque responsable a viré sa provision le 5.
  // Le compte garde l'argent des factures prévues après le 8 (électricité le 10, eau le 12).
@@ -365,9 +369,9 @@ function demoDataset(){
  const demoDate=day=>`${String(day).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
  for(const charge of charges){
    example.operations.push({id:uid(),kind:'deposit',label:`Virement automatique de ${charge.owner} pour ${charge.name}`,amount:charge.amount,date:demoDate(5),chargeId:charge.id,period,payer:charge.owner,month:period});
+   debtsFor(`${charge.name} (${period})`,charge.amount,charge.owner,MEMBERS);
    if(charge.day>demoDay)continue;
    example.operations.push({id:uid(),kind:'withdrawal',label:`Prélèvement ${charge.name}`,amount:charge.amount,date:demoDate(charge.day),chargeId:charge.id,period,category:'fixes',month:period});
-   debtsFor(`${charge.name} (${period})`,charge.amount,charge.owner,MEMBERS);
  }
  for(const [label,amount,payer,category,participants] of [
   ['Courses de la semaine',8350,'Maya','courses',MEMBERS],
