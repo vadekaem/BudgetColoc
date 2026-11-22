@@ -56,7 +56,30 @@ function addMember(){
  const name=input.value.trim().replace(/\s+/g,' ');
  if(!name||name.length>40){alert('Saisissez un prénom de 1 à 40 caractères.');return;}
  if(MEMBERS.some(m=>m.toLocaleLowerCase('fr')===name.toLocaleLowerCase('fr'))){alert('Ce prénom existe déjà.');return;}
- MEMBERS.push(name);input.value='';refreshMemberSelectors();save();
+ // Les dettes existantes ne sont jamais recalculées : le nouveau membre
+ // participe uniquement aux nouvelles dépenses et aux échéances futures.
+ // En mode démo, renseigner ses capacités pour qu'il participe aussitôt
+ // aux contributions prévues (le mode démo utilise la répartition proportionnelle).
+ let newBudget=null;
+ if(demoMode){
+  const fields=[['revenu mensuel',1000],['loyer individuel',350],['autres frais personnels',150]];
+  const values=[];
+  for(const [label,example] of fields){
+   const answer=prompt(`Mode démonstration : ${label} de ${name} (en €)`,String(example));
+   if(answer===null)return; // Annulation : ne pas créer de colocataire incomplet.
+   const n=Number(answer.trim().replace(',','.'));
+   if(!Number.isFinite(n)||n<0||n>1000000){alert(`Montant invalide pour « ${label} ». Ajout annulé.`);return;}
+   values.push(Math.round(n*100));
+  }
+  newBudget=values;
+ }
+ MEMBERS.push(name);
+ if(newBudget){
+  const b=budgetData();
+  b.incomes[name]=newBudget[0];b.rents[name]=newBudget[1];b.personalCosts[name]=newBudget[2];
+ }
+ input.value='';refreshMemberSelectors();save();
+ if(!demoMode)alert(`« ${name} » a été ajouté. Pour calculer sa contribution aux charges fixes, renseignez ses revenus et frais personnels dans « Budget & Prévisions ». Les dettes antérieures restent inchangées.`);
 }
 function removeMember(name){
  if(MEMBERS.length<=1){alert('Il faut conserver au moins un colocataire.');return;}
@@ -382,10 +405,10 @@ function demoDataset(){
    example.operations.push({id:uid(),kind:'withdrawal',label:`Prélèvement ${charge.name}`,amount:charge.amount,date:demoDate(charge.day),chargeId:charge.id,period,category:'fixes',month:period});
  }
  for(const [label,amount,payer,category,participants] of [
-  ['Courses de la semaine',8350,'Maya','courses',MEMBERS],
-  ['Soirée cinéma',4800,'Jihad','loisirs',MEMBERS],
-  ['Produits ménagers',2670,'Amandine','equipement',MEMBERS],
-  ['Courses complémentaires',3920,'Yasmine','courses',MEMBERS]
+  ['Courses de la semaine',8350,'Maya','courses',DEFAULT_MEMBERS],
+  ['Soirée cinéma',4800,'Jihad','loisirs',DEFAULT_MEMBERS],
+  ['Produits ménagers',2670,'Amandine','equipement',DEFAULT_MEMBERS],
+  ['Courses complémentaires',3920,'Yasmine','courses',DEFAULT_MEMBERS]
  ]){debtsFor(label,amount,payer,participants);example.operations.push({id:uid(),kind:'personal',label:`${label} — payé par ${payer}`,amount,date:today(),category,month:period,payer});}
  return example;
 }
