@@ -51,6 +51,28 @@ function refreshMemberSelectors(){
  }
  const root=$('participants');if(root){root.replaceChildren();for(const m of MEMBERS){const label=el('label'),checkbox=el('input');checkbox.type='checkbox';checkbox.value=m;checkbox.checked=true;checkbox.name='participant';label.append(checkbox,document.createTextNode(m));root.append(label);}}
 }
+// Répartir à nouveau les dettes NON REMBOURSÉES des charges mensuelles
+// de la période courante, uniquement en mode démonstration.
+// Les dépenses ponctuelles et les remboursements validés restent inchangés.
+function redistributeDemoCurrentCharges(){
+ if(!demoMode)return;
+ const period=monthKey();
+ for(const charge of data.charges){
+  const label=`${charge.name} (${period})`;
+  const matching=data.debts.filter(d=>d.label===label);
+  if(!matching.length || matching.some(d=>d.paid))continue;
+  // Ne toucher qu'aux charges identifiées par une avance réelle en mode démo.
+  const advanced=data.operations.some(o=>o.kind==='deposit'&&o.chargeId===charge.id&&o.period===period);
+  if(!advanced)continue;
+  data.debts=data.debts.filter(d=>d.label!==label);
+  for(const share of split(charge.amount,MEMBERS)){
+   if(share.name!==charge.owner&&share.amount>0){
+    data.debts.push({id:uid(),label,from:share.name,to:charge.owner,
+      amount:share.amount,paid:false,date:today(),chargeId:charge.id,period});
+   }
+  }
+ }
+}
 function addMember(){
  const input=$('newMemberName');if(!input)return;
  const name=input.value.trim().replace(/\s+/g,' ');
@@ -74,6 +96,7 @@ function addMember(){
   newBudget=values;
  }
  MEMBERS.push(name);
+ redistributeDemoCurrentCharges();
  if(newBudget){
   const b=budgetData();
   b.incomes[name]=newBudget[0];b.rents[name]=newBudget[1];b.personalCosts[name]=newBudget[2];
