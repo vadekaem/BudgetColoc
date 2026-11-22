@@ -64,6 +64,7 @@ function redistributeDemoCurrentCharges(){
   // Ne toucher qu'aux charges identifiées par une avance réelle en mode démo.
   const advanced=data.operations.some(o=>o.kind==='deposit'&&o.chargeId===charge.id&&o.period===period);
   if(!advanced)continue;
+  if(data.operations.some(o=>o.kind==='deposit'&&o.chargeId===charge.id&&o.period===period&&o.amount!==charge.amount))continue;
   data.debts=data.debts.filter(d=>d.label!==label);
   for(const share of split(charge.amount,MEMBERS)){
    if(share.name!==charge.owner&&share.amount>0){
@@ -222,6 +223,63 @@ function renderShoppingRecommendation(){
  root.append(el('p','La recommandation suit la répartition égalitaire ou proportionnelle sélectionnée dans Budget & Prévisions. Les remboursements futurs ne sont pas considérés comme de l’argent déjà disponible. Aucun paiement n’est créé automatiquement.','muted'));
 }
 
+// Les modifications des modèles mensuels ne changent jamais les factures déjà enregistrées.
+function editCharge(id){
+ const c=data.charges.find(x=>x.id===id);if(!c)return;
+ const answer=prompt(`Nouveau montant mensuel pour « ${c.name} » (en €) :`,(c.amount/100).toFixed(2));
+ if(answer===null)return;
+ let amount;try{amount=cents(answer.trim().replace(',','.'));}catch(e){alert(e.message);return;}
+ if(amount===c.amount)return;
+ if(!confirm(`Modifier les prochaines échéances de « ${c.name} » à ${money(amount)} ? Les factures et dettes déjà enregistrées ne seront pas modifiées.`))return;
+ c.amount=amount;save();
+}
+function deleteCharge(id){
+ const c=data.charges.find(x=>x.id===id);if(!c)return;
+ if(!confirm(`Supprimer la charge mensuelle « ${c.name} » ? Les échéances futures seront supprimées, mais les opérations et remboursements passés seront conservés.`))return;
+ data.charges=data.charges.filter(x=>x.id!==id);save();
+}
+// Retrouver les dettes associées à une dépense ponctuelle. Les nouvelles opérations
+// possèdent un identifiant de liaison ; pour les anciennes, rester prudent.
+function expenseDebts(op){
+ if(op.kind!=='personal')return null;
+ const linked=data.debts.filter(d=>d.expenseId===op.id);
+ if(linked.length||Array.isArray(op.participants))return linked;
+ const label=op.expenseName||String(op.label).split(' — payé par ')[0];
+ const candidates=data.operations.filter(o=>o.kind==='personal'&&(o.expenseName||String(o.label).split(' — payé par ')[0])===label&&o.payer===op.payer);
+ if(candidates.length!==1)return null; // Éviter de modifier deux dépenses homonymes.
+ const debts=data.debts.filter(d=>!d.expenseId&&d.label===label&&d.to===op.payer);
+ if(!debts.length)return null;
+ // Pour une ancienne opération, le groupe de participants est reconstitué
+ // seulement si aucune dette n'a déjà été remboursée.
+ return debts;
+}
+function editExpense(id){
+ const op=data.operations.find(o=>o.id===id&&o.kind==='personal');if(!op)return;
+ const debts=expenseDebts(op);
+ if(!debts){alert('Impossible de relier cette ancienne dépense à ses dettes avec certitude. Pour éviter de modifier les mauvais remboursements, cette opération est protégée.');return;}
+ if(debts.some(d=>d.paid)){alert('Cette dépense comporte déjà un remboursement validé : modification bloquée pour préserver les comptes.');return;}
+ const answer=prompt(`Nouveau montant pour « ${op.expenseName||op.label} » (en €) :`,(op.amount/100).toFixed(2));
+ if(answer===null)return;
+ let amount;try{amount=cents(answer.trim().replace(',','.'));}catch(e){alert(e.message);return;}
+ if(amount===op.amount)return;
+ if(!confirm(`Recalculer les remboursements de cette dépense pour ${money(amount)} ?`))return;
+ const participants=op.participants||[op.payer,...debts.map(d=>d.from)];
+ const unique=[...new Set(participants)];
+ if(!unique.length)return;
+ data.debts=data.debts.filter(d=>!debts.includes(d));
+ for(const share of split(amount,unique))if(share.name!==op.payer&&share.amount>0)
+  data.debts.push({id:uid(),label:op.expenseName||String(op.label).split(' — payé par ')[0],from:share.name,to:op.payer,amount:share.amount,paid:false,date:op.date,expenseId:op.id});
+ op.amount=amount;op.participants=unique;save();
+}
+function deleteExpense(id){
+ const op=data.operations.find(o=>o.id===id&&o.kind==='personal');if(!op)return;
+ const debts=expenseDebts(op);
+ if(!debts){alert('Impossible de relier cette ancienne dépense à ses dettes avec certitude : suppression bloquée.');return;}
+ if(debts.some(d=>d.paid)){alert('Un remboursement a déjà été validé : suppression bloquée pour préserver les comptes.');return;}
+ if(!confirm(`Supprimer « ${op.label} » et toutes les dettes non remboursées associées ?`))return;
+ data.debts=data.debts.filter(d=>!debts.includes(d));
+ data.operations=data.operations.filter(o=>o.id!==id);save();
+}
 function render(){
   if(!$('balance')){renderBudget();return;}
   const inTotal=data.operations.filter(x=>x.kind==='deposit').reduce((s,x)=>s+x.amount,0);
@@ -232,7 +290,10 @@ function render(){
   $('chargeCount').textContent=data.charges.length;
   $('charges').replaceChildren();
   for(const c of data.charges){const box=el('div',undefined,'charge');box.append(el('strong',`${c.name} — ${money(c.amount)}`),el('div',`Responsable : ${c.owner} · Échéance : le ${c.day} du mois`,'muted'));
-    const hasDeposit=data.operations.some(o=>o.kind==='deposit'&&o.chargeId===c.id&&o.period===monthKey());const isPaid=data.operations.some(o=>o.kind==='withdrawal'&&o.chargeId===c.id&&o.period===monthKey());box.append(el('small',isPaid?'✅ Prélevée':hasDeposit?'🕒 Provision déjà versée · prélèvement en attente':'⏳ Versement et prélèvement à effectuer','muted'));const b=el('button',isPaid?'Déjà prélevée':hasDeposit?'Enregistrer le prélèvement':'Verser et payer ce mois');b.disabled=isPaid;b.type='button';b.addEventListener('click',()=>payCharge(c.id));box.append(b);$('charges').append(box);}
+    const hasDeposit=data.operations.some(o=>o.kind==='deposit'&&o.chargeId===c.id&&o.period===monthKey());const isPaid=data.operations.some(o=>o.kind==='withdrawal'&&o.chargeId===c.id&&o.period===monthKey());box.append(el('small',isPaid?'✅ Prélevée':hasDeposit?'🕒 Provision déjà versée · prélèvement en attente':'⏳ Versement et prélèvement à effectuer','muted'));const b=el('button',isPaid?'Déjà prélevée':hasDeposit?'Enregistrer le prélèvement':'Verser et payer ce mois');b.disabled=isPaid;b.type='button';b.addEventListener('click',()=>payCharge(c.id));box.append(b);
+    const edit=el('button','✏️ Modifier le montant','secondary');edit.type='button';edit.addEventListener('click',()=>editCharge(c.id));
+    const remove=el('button','🗑️ Supprimer la charge','secondary');remove.type='button';remove.addEventListener('click',()=>deleteCharge(c.id));
+    box.append(edit,remove);$('charges').append(box);}
   if(!data.charges.length)$('charges').append(el('p','Aucune charge mensuelle.','muted'));
   const totals=Object.fromEntries(MEMBERS.map(n=>[n,{owes:0,receives:0}]));
   for(const d of data.debts.filter(x=>!x.paid)){if(totals[d.from])totals[d.from].owes+=d.amount;if(totals[d.to])totals[d.to].receives+=d.amount;}
@@ -242,7 +303,12 @@ function render(){
   $('summary').replaceChildren();for(const m of MEMBERS){const tr=el('tr');cell(tr,m);cell(tr,money(totals[m].owes));cell(tr,money(totals[m].receives));$('summary').append(tr);}
   $('debts').replaceChildren();for(const d of data.debts.slice().reverse()){const tr=el('tr');cell(tr,d.label);cell(tr,d.from);cell(tr,d.to);cell(tr,money(d.amount));const st=el('td');st.append(el('span',d.paid?'Remboursé':'À rembourser',`tag ${d.paid?'paid':''}`));tr.append(st);const action=el('td');if(!d.paid){const b=el('button','Marquer remboursé');b.addEventListener('click',()=>{if(confirm(`Confirmer le remboursement de ${money(d.amount)} par ${d.from} à ${d.to} ?`)){d.paid=true;operation('settlement',`${d.from} → ${d.to} (${d.label})`,d.amount,{from:d.from,to:d.to,month:monthKey()});save();}});action.append(b);}else action.textContent='✓';tr.append(action);$('debts').append(tr);}
   if(!data.debts.length){const tr=el('tr');const td=el('td','Aucune dette enregistrée.');td.colSpan=6;tr.append(td);$('debts').append(tr);}
-  $('history').replaceChildren();for(const op of data.operations.slice().reverse()){const symbol=op.kind==='deposit'?'↗':op.kind==='withdrawal'?'↘':'✓';$('history').append(el('div',`${symbol} ${op.date} — ${op.label} : ${money(op.amount)}`,'history-row'));}if(!data.operations.length)$('history').append(el('p','Aucune opération.','muted'));
+  $('history').replaceChildren();for(const op of data.operations.slice().reverse()){const symbol=op.kind==='deposit'?'↗':op.kind==='withdrawal'?'↘':'✓';{const row=el('div',undefined,'history-row');row.append(document.createTextNode(`${symbol} ${op.date} — ${op.label} : ${money(op.amount)} `));
+   if(op.kind==='personal'){
+    const edit=el('button','✏️ Modifier','secondary');edit.type='button';edit.addEventListener('click',()=>editExpense(op.id));
+    const remove=el('button','🗑️ Supprimer','secondary');remove.type='button';remove.addEventListener('click',()=>deleteExpense(op.id));
+    row.append(edit,remove);
+   }$('history').append(row);}}if(!data.operations.length)$('history').append(el('p','Aucune opération.','muted'));
 }
 function renderProfiles(totals){
   const root=$('profileCards');root.replaceChildren();
@@ -313,7 +379,10 @@ function payCharge(id){
 if($('chargeOwner')) {
 refreshMemberSelectors();
 $('chargeForm').addEventListener('submit',e=>{e.preventDefault();try{const name=$('chargeName').value.trim(),amount=cents($('chargeAmount').value),day=Number($('chargeDay').value);if(!name||!Number.isInteger(day)||day<1||day>28)throw Error('Informations invalides');data.charges.push({id:uid(),name,amount,owner:$('chargeOwner').value,category:$('chargeCategory').value,day});save();e.target.reset();}catch(err){alert(err.message);}});
-$('expenseForm').addEventListener('submit',e=>{e.preventDefault();try{const name=$('expenseName').value.trim(),amount=cents($('expenseAmount').value),payer=$('expensePayer').value,participants=[...document.querySelectorAll('input[name="participant"]:checked')].map(x=>x.value);if(!name||!participants.length)throw Error('Choisissez une description et au moins un participant.');if(!confirm(`Enregistrer ${money(amount)} payés par ${payer}, partagés entre ${participants.join(', ')} ?`))return;addDebts(name,amount,payer,participants);operation('personal',`${name} — payé par ${payer}`,amount);const op=data.operations[data.operations.length-1];op.category=$('expenseCategory').value;op.month=monthKey();op.payer=payer;save();e.target.reset();}catch(err){alert(err.message);}});
+$('expenseForm').addEventListener('submit',e=>{e.preventDefault();try{const name=$('expenseName').value.trim(),amount=cents($('expenseAmount').value),payer=$('expensePayer').value,participants=[...document.querySelectorAll('input[name="participant"]:checked')].map(x=>x.value);if(!name||!participants.length)throw Error('Choisissez une description et au moins un participant.');if(!confirm(`Enregistrer ${money(amount)} payés par ${payer}, partagés entre ${participants.join(', ')} ?`))return;operation('personal',`${name} — payé par ${payer}`,amount);const op=data.operations[data.operations.length-1];
+ op.category=$('expenseCategory').value;op.month=monthKey();op.payer=payer;op.expenseName=name;op.participants=[...participants];
+ for(const share of split(amount,participants))if(share.name!==payer&&share.amount>0)data.debts.push({id:uid(),label:name,from:share.name,to:payer,amount:share.amount,paid:false,date:today(),expenseId:op.id});
+ save();e.target.reset();}catch(err){alert(err.message);}});
 
 }
 // Budget : prévisions séparées des dettes. Les opérations réelles alimentent les graphiques.
@@ -432,7 +501,9 @@ function demoDataset(){
   ['Soirée cinéma',4800,'Jihad','loisirs',DEFAULT_MEMBERS],
   ['Produits ménagers',2670,'Amandine','equipement',DEFAULT_MEMBERS],
   ['Courses complémentaires',3920,'Yasmine','courses',DEFAULT_MEMBERS]
- ]){debtsFor(label,amount,payer,participants);example.operations.push({id:uid(),kind:'personal',label:`${label} — payé par ${payer}`,amount,date:today(),category,month:period,payer});}
+ ]){const expenseId=uid();for(const share of split(amount,participants))if(share.name!==payer&&share.amount>0)
+ example.debts.push({id:uid(),label,from:share.name,to:payer,amount:share.amount,paid:false,date:today(),expenseId});
+ example.operations.push({id:expenseId,kind:'personal',label:`${label} — payé par ${payer}`,expenseName:label,participants:[...participants],amount,date:today(),category,month:period,payer});}
  return example;
 }
 function setDemoMode(enabled){
